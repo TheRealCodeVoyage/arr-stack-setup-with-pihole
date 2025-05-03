@@ -1,0 +1,283 @@
+version: "3.8"
+
+#########################
+# Centralized Volumes   #
+#########################
+volumes:
+  qbittorrent-config:
+  sonarr-config:
+  prowlarr-config:
+  radarr-config:
+  jellyfin-config:
+  jellyfin-cache:
+  pihole-etc-pihole:
+  pihole-etc-dnsmasq:
+  wireguard-easy-config:
+
+#########################
+# Networks              #
+#########################
+networks:
+  vpn-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.8.1.0/24  # your VPN network/subnet
+  frontend:
+    external: true  # your Traefik proxy network
+
+#########################
+# Logging               #
+#########################
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+#########################
+# Services              #
+#########################
+services:
+  gluetun:
+    image: qmcgaw/gluetun
+    container_name: gluetun
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    env_file:
+      - .env
+    volumes:
+      - ./gluetun-config:/gluetun
+    environment:
+      # Should be Changed to your VPN client and credentials
+      - VPN_SERVICE_PROVIDER=expressvpn
+      - OPENVPN_USER=${OPENVPN_USER}
+      - OPENVPN_PASSWORD=${OPENVPN_PASSWORD}
+      - SERVER_COUNTRIES=Canada
+      - SERVER_CITIES=Toronto,Montreal
+    networks:
+      - frontend
+      - vpn-net
+    logging: *default-logging
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent
+    container_name: qbittorrent
+    network_mode: "service:gluetun"
+    depends_on:
+      - gluetun
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=US/Pacific
+      - WEBUI_PORT=8085
+    volumes:
+      - qbittorrent-config:/config
+      - ./media/downloads:/downloads
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=frontend"
+      - "traefik.http.routers.qbittorrent.rule=Host(`Your qbittorrent Domain`)"
+      - "traefik.http.routers.qbittorrent.entrypoints=web"
+      - "traefik.http.services.qbittorrent.loadbalancer.server.port=8085"
+    restart: always
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8085/"]
+      interval: 1m30s
+      timeout: 10s
+      retries: 3
+
+
+
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    network_mode: "service:gluetun"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=US/Pacific
+    volumes:
+      - sonarr-config:/config
+      - ./media/tv:/tv
+      - ./media/downloads:/downloads
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sonarr-http.rule=Host(`your sonarr domain`)"
+      - "traefik.http.routers.sonarr-http.entrypoints=web"
+      - "traefik.http.services.sonarr.loadbalancer.server.port=8989"
+    restart: unless-stopped
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8989/"]
+      interval: 2m
+      timeout: 10s
+      retries: 3
+
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    network_mode: "service:gluetun"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=US/Pacific
+    volumes:
+      - prowlarr-config:/config
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=frontend"
+      - "traefik.http.routers.prowlarr.rule=Host(`your prowlarr domain`)"
+      - "traefik.http.routers.prowlarr.entrypoints=web"
+      - "traefik.http.routers.prowlarr.service=prowlarr"
+      - "traefik.http.services.prowlarr.loadbalancer.server.port=9696"
+    restart: unless-stopped
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9696/"]
+      interval: 2m
+      timeout: 10s
+      retries: 3
+
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    network_mode: "service:gluetun"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=US/Pacific
+    volumes:
+      - radarr-config:/config
+      - ./media/movies:/movies
+      - ./media/downloads:/downloads
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=frontend"
+      - "traefik.http.routers.radarr.rule=Host(`your radarr domain`)"
+      - "traefik.http.routers.radarr.entrypoints=web"
+      - "traefik.http.routers.radarr.service=radarr"
+      - "traefik.http.services.radarr.loadbalancer.server.port=7878"
+    restart: unless-stopped
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7878/"]
+      interval: 2m
+      timeout: 10s
+      retries: 3
+
+
+  jellyfin:
+    image: jellyfin/jellyfin
+    container_name: jellyfin
+    network_mode: "service:gluetun"
+    environment:
+      - TZ=US/Pacific
+    volumes:
+      - jellyfin-config:/config
+      - jellyfin-cache:/cache
+      - ./media/movies:/media/movies
+      - ./media/tv:/media/tv
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=frontend"
+      - "traefik.http.routers.jellyfin.entrypoints=web"
+      - "traefik.http.routers.jellyfin.rule=Host(`Your Jellyfin Host/Domain`)"
+      - "traefik.http.middlewares.jellyfin-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.jellyfin.middlewares=jellyfin-https-redirect"
+      - "traefik.http.routers.jellyfin-secure.entrypoints=websecure"
+      - "traefik.http.routers.jellyfin-secure.rule=Host(`Your Jellyfin Host/Domain`)"
+      - "traefik.http.routers.jellyfin-secure.tls=true"
+      - "traefik.http.routers.jellyfin-secure.tls.certresolver=cloudflare" #You should change this to your own resolver
+      - "traefik.http.routers.jellyfin-secure.service=jellyfin"
+      - "traefik.http.services.jellyfin.loadbalancer.server.port=8096"
+    restart: unless-stopped
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8096/"]
+      interval: 3m
+      timeout: 10s
+      retries: 2
+
+  pihole:
+    image: pihole/pihole:latest
+    container_name: pihole
+    ports:
+      - "53535:53/tcp"
+      - "53535:53/udp"
+    networks:
+      frontend:
+      vpn-net:
+        ipv4_address: 10.8.1.200
+    environment:
+      - TZ=US/Pacific
+      - FTLCONF_webserver_api_password=${PIHOLE_UI_PASS}
+      - FTLCONF_dns_listeningMode=all
+    volumes:
+      - pihole-etc-pihole:/etc/pihole
+      - pihole-etc-dnsmasq:/etc/dnsmasq.d
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=frontend"
+      - "traefik.http.routers.pihole.rule=Host(`your pihole domain`)"
+      - "traefik.http.routers.pihole.entrypoints=web"
+      - "traefik.http.routers.pihole.service=pihole"
+      - "traefik.http.services.pihole.loadbalancer.server.port=80"
+    cap_add:
+      - NET_ADMIN
+      - SYS_NICE
+      - SYS_TIME
+    restart: unless-stopped
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "dig", "@127.0.0.1 -p 53 <your sonarr or other services domain> +short"]
+      interval: 5m
+      timeout: 10s
+      retries: 2
+
+  wg-easy:
+    image: ghcr.io/wg-easy/wg-easy
+    container_name: wg-easy
+    environment:
+      - LANG=en
+      - WG_HOST=Your WireGuard Host/Domain
+      - PASSWORD_HASH=${WG_PASSWORD_HASH}
+      - WG_DEFAULT_ADDRESS=10.8.0.x
+      - WG_DEFAULT_DNS=10.8.1.200#53535
+    volumes:
+      - wireguard-easy-config:/etc/wireguard
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=frontend"
+      - "traefik.http.routers.wg.entrypoints=web"
+      - "traefik.http.routers.wg.rule=Host(`Your WireGuard Host/Domain`)"
+      - "traefik.http.middlewares.wg-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.wg.middlewares=wg-https-redirect"
+      - "traefik.http.routers.wg-secure.entrypoints=websecure"
+      - "traefik.http.routers.wg-secure.rule=Host(`Your WireGuard Host/Domain`)"
+      - "traefik.http.routers.wg-secure.tls=true"
+      - "traefik.http.routers.wg-secure.tls.certresolver=cloudflare"
+      - "traefik.http.routers.wg-secure.service=wg-secure"
+      - "traefik.http.services.wg-secure.loadbalancer.server.port=51821"
+    ports:
+      - "51820:51820/udp"
+    networks:
+        frontend:
+        vpn-net:
+          ipv4_address: 10.8.1.3
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.src_valid_mark=1
+    restart: unless-stopped
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "wg", "show"]
+      interval: 5m
+      timeout: 10s
+      retries: 1
