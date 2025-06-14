@@ -58,8 +58,9 @@ services:
       - SERVER_COUNTRIES=Canada
       - SERVER_CITIES=Toronto,Montreal
     networks:
-      - frontend
-      - vpn-net
+      frontend:
+        ipv4_address: ${GLUETUN_IP}
+      vpn-net:
     logging: *default-logging
 
   qbittorrent:
@@ -76,10 +77,11 @@ services:
     volumes:
       - qbittorrent-config:/config
       - ./media/downloads:/downloads
+      - ./media:/media
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=frontend"
-      - "traefik.http.routers.qbittorrent.rule=Host(`Your qbittorrent Domain`)"
+      - "traefik.http.routers.qbittorrent.rule=Host(`Your qbittorrent Domain`)" # TODO: Change Needed Here
       - "traefik.http.routers.qbittorrent.entrypoints=web"
       - "traefik.http.services.qbittorrent.loadbalancer.server.port=8085"
     restart: always
@@ -106,7 +108,7 @@ services:
       - ./media/downloads:/downloads
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.sonarr-http.rule=Host(`your sonarr domain`)"
+      - "traefik.http.routers.sonarr-http.rule=Host(`your sonarr domain`)" # TODO: Change Needed Here
       - "traefik.http.routers.sonarr-http.entrypoints=web"
       - "traefik.http.services.sonarr.loadbalancer.server.port=8989"
     restart: unless-stopped
@@ -130,7 +132,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=frontend"
-      - "traefik.http.routers.prowlarr.rule=Host(`your prowlarr domain`)"
+      - "traefik.http.routers.prowlarr.rule=Host(`your prowlarr domain`)" # TODO: Change Needed Here
       - "traefik.http.routers.prowlarr.entrypoints=web"
       - "traefik.http.routers.prowlarr.service=prowlarr"
       - "traefik.http.services.prowlarr.loadbalancer.server.port=9696"
@@ -157,7 +159,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=frontend"
-      - "traefik.http.routers.radarr.rule=Host(`your radarr domain`)"
+      - "traefik.http.routers.radarr.rule=Host(`your radarr domain`)" # TODO: Change Needed Here
       - "traefik.http.routers.radarr.entrypoints=web"
       - "traefik.http.routers.radarr.service=radarr"
       - "traefik.http.services.radarr.loadbalancer.server.port=7878"
@@ -173,7 +175,6 @@ services:
   jellyfin:
     image: jellyfin/jellyfin
     container_name: jellyfin
-    network_mode: "service:gluetun"
     environment:
       - TZ=US/Pacific
     volumes:
@@ -181,15 +182,17 @@ services:
       - jellyfin-cache:/cache
       - ./media/movies:/media/movies
       - ./media/tv:/media/tv
+    networks:
+      frontend:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=frontend"
       - "traefik.http.routers.jellyfin.entrypoints=web"
-      - "traefik.http.routers.jellyfin.rule=Host(`Your Jellyfin Host/Domain`)"
+      - "traefik.http.routers.jellyfin.rule=Host(`Your Jellyfin Host/Domain`)" # TODO: Change Needed Here
       - "traefik.http.middlewares.jellyfin-https-redirect.redirectscheme.scheme=https"
       - "traefik.http.routers.jellyfin.middlewares=jellyfin-https-redirect"
       - "traefik.http.routers.jellyfin-secure.entrypoints=websecure"
-      - "traefik.http.routers.jellyfin-secure.rule=Host(`Your Jellyfin Host/Domain`)"
+      - "traefik.http.routers.jellyfin-secure.rule=Host(`Your Jellyfin Host/Domain`)" # TODO: Change Needed Here
       - "traefik.http.routers.jellyfin-secure.tls=true"
       - "traefik.http.routers.jellyfin-secure.tls.certresolver=cloudflare" #You should change this to your own resolver
       - "traefik.http.routers.jellyfin-secure.service=jellyfin"
@@ -206,10 +209,11 @@ services:
     image: pihole/pihole:latest
     container_name: pihole
     ports:
-      - "53535:53/tcp"
+      - "53535:53/tcp" 
       - "53535:53/udp"
     networks:
       frontend:
+        ipv4_address: ${PIHOLE_IP}
       vpn-net:
         ipv4_address: 10.8.1.200
     environment:
@@ -222,7 +226,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=frontend"
-      - "traefik.http.routers.pihole.rule=Host(`your pihole domain`)"
+      - "traefik.http.routers.pihole.rule=Host(`your pihole domain`)" # TODO: Change Needed Here
       - "traefik.http.routers.pihole.entrypoints=web"
       - "traefik.http.routers.pihole.service=pihole"
       - "traefik.http.services.pihole.loadbalancer.server.port=80"
@@ -243,21 +247,21 @@ services:
     container_name: wg-easy
     environment:
       - LANG=en
-      - WG_HOST=Your WireGuard Host/Domain
+      - WG_HOST=Your WireGuard Host/Domain # TODO: Change Needed Here
       - PASSWORD_HASH=${WG_PASSWORD_HASH}
       - WG_DEFAULT_ADDRESS=10.8.0.x
-      - WG_DEFAULT_DNS=10.8.1.200#53535
+      - WG_DEFAULT_DNS=10.8.1.200#53535 # TODO: Change Needed Here depends on the pihole port you setup
     volumes:
       - wireguard-easy-config:/etc/wireguard
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=frontend"
       - "traefik.http.routers.wg.entrypoints=web"
-      - "traefik.http.routers.wg.rule=Host(`Your WireGuard Host/Domain`)"
+      - "traefik.http.routers.wg.rule=Host(`Your WireGuard Host/Domain`)" # TODO: Change Needed Here
       - "traefik.http.middlewares.wg-https-redirect.redirectscheme.scheme=https"
       - "traefik.http.routers.wg.middlewares=wg-https-redirect"
       - "traefik.http.routers.wg-secure.entrypoints=websecure"
-      - "traefik.http.routers.wg-secure.rule=Host(`Your WireGuard Host/Domain`)"
+      - "traefik.http.routers.wg-secure.rule=Host(`Your WireGuard Host/Domain`)" # TODO: Change Needed Here
       - "traefik.http.routers.wg-secure.tls=true"
       - "traefik.http.routers.wg-secure.tls.certresolver=cloudflare"
       - "traefik.http.routers.wg-secure.service=wg-secure"
@@ -266,6 +270,7 @@ services:
       - "51820:51820/udp"
     networks:
         frontend:
+          ipv4_address: ${WG_IP}
         vpn-net:
           ipv4_address: 10.8.1.3
     cap_add:
@@ -281,3 +286,88 @@ services:
       interval: 5m
       timeout: 10s
       retries: 1
+
+  jellyseerr:
+    image: fallenbagel/jellyseerr:latest
+    container_name: jellyseerr
+    environment:
+      - LOG_LEVEL=debug
+      - TZ=US/Pacific
+      - PORT=5055 #optional
+    networks:
+      frontend:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=frontend"
+      - "traefik.http.routers.jellyseerr.entrypoints=web"
+      - "traefik.http.routers.jellyseerr.rule=Host(`Your JellySeerr Full Public Domain`)" # TODO: Change Needed Here
+      - "traefik.http.middlewares.jellyseerr-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.jellyseerr.middlewares=jellyseerr-https-redirect"
+      - "traefik.http.routers.jellyseerr-secure.entrypoints=websecure"
+      - "traefik.http.routers.jellyseerr-secure.rule=Host(`Your JellySeerr Full Public Domain`)" # TODO: Change Needed Here
+      - "traefik.http.routers.jellyseerr-secure.tls=true"
+      - "traefik.http.routers.jellyseerr-secure.tls.certresolver=cloudflare"
+      - "traefik.http.routers.jellyseerr-secure.service=jellyseerr"
+      - "traefik.http.services.jellyseerr.loadbalancer.server.port=5055"
+    volumes:
+      - ./jellyseerr/config:/app/config
+    restart: unless-stopped
+
+  bazarr:
+    image: lscr.io/linuxserver/bazarr:latest
+    container_name: bazarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=US/Pacific
+    networks:
+      - frontend
+    volumes:
+      - ./bazarr/config:/config
+      - ./media/movies:/movies #optional
+      - ./media/tv:/tv #optional
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=frontend"
+      - "traefik.http.routers.bazarr.rule=Host(`bazarr.localhost`)" # TODO: Change Needed Here
+      - "traefik.http.routers.bazarr.entrypoints=web"
+      - "traefik.http.routers.bazarr.service=bazarr"
+      - "traefik.http.services.bazarr.loadbalancer.server.port=6767"
+    restart: unless-stopped
+    logging: *default-logging
+
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    environment:
+      - LOG_LEVEL=debug
+    networks:
+      - frontend
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=frontend"
+      - "traefik.http.routers.flaresolverr.rule=Host(`flaresolverr.localhost`)" # TODO: Change Needed Here
+      - "traefik.http.routers.flaresolverr.entrypoints=web"
+      - "traefik.http.routers.flaresolverr.service=flaresolverr"
+      - "traefik.http.services.flaresolverr.loadbalancer.server.port=8191"
+    restart: unless-stopped
+    logging: *default-logging
+
+  notifiarr:
+    container_name: notifiarr
+    hostname: notifiarr
+    image: golift/notifiarr
+    restart: unless-stopped
+    networks:
+      - frontend
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=frontend"
+      - "traefik.http.routers.notifiarr.rule=Host(`notifiarr.localhost`)" # TODO: Change Needed Here
+      - "traefik.http.routers.notifiarr.entrypoints=web"
+      - "traefik.http.routers.notifiarr.service=notifiarr"
+      - "traefik.http.services.notifiarr.loadbalancer.server.port=5454"
+    volumes:
+      - ./notifiarr:/config # Download Notifiarr configurations from here (https://github.com/Notifiarr/notifiarr/blob/main/examples/notifiarr.conf.example). Make sure you modify and complete the config file. make sure to put it in the ./notifiarr directory
+      - /var/run/utmp:/var/run/utmp
+      - /etc/machine-id:/etc/machine-id
